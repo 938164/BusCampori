@@ -3,60 +3,55 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 import sqlite3
 import shutil
-import os
 import time
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 
-# Conexão com Banco de Dados
-def get_db():
-    conn = sqlite3.connect("db.sqlite", check_same_thread=False)
-    return conn
+# Tempo de bloqueio (em segundos). 600 segundos = 10 minutos
+TEMPO_LIMITE_RESERVA = 600 
 
-conn = get_db()
-c = conn.cursor()
-
-# Criar tabela com todas as colunas necessárias
-c.execute("""
-CREATE TABLE IF NOT EXISTS assentos (
-    numero INTEGER PRIMARY KEY,
-    status TEXT,
-    timestamp INTEGER,
-    nome TEXT,
-    nascimento TEXT,
-    pai TEXT,
-    mae TEXT,
-    pagamento TEXT
-)
-""")
-
-# Iniciar assentos se o banco estiver vazio (1 a 60)
-c.execute("SELECT COUNT(*) FROM assentos")
-if c.fetchone()[0] == 0:
-    for i in range(1, 61):
-        c.execute("INSERT INTO assentos VALUES (?, 'livre', 0, '', '', '', '', '')", (i,))
+def limpar_reservas_expiradas():
+    conn = sqlite3.connect("db.sqlite")
+    c = conn.cursor()
+    agora = int(time.time())
+    # Se o status for 'reservado' e o tempo passou do limite, volta para 'livre'
+    limite = agora - TEMPO_LIMITE_RESERVA
+    c.execute("UPDATE assentos SET status='livre', timestamp=0 WHERE status='reservado' AND timestamp < ?", (limite,))
     conn.commit()
+    conn.close()
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
+    # Limpa os "desistentes" antes de mostrar os assentos para alguém novo
+    limpar_reservas_expiradas()
+    
+    conn = sqlite3.connect("db.sqlite")
+    c = conn.cursor()
     c.execute("SELECT numero, status FROM assentos")
     dados = c.fetchall()
-    return templates.TemplateResponse(
-        request=request, name="index.html", context={"assentos": dados}
-    )
+    conn.close()
+    return templates.TemplateResponse(request=request, name="index.html", context={"assentos": dados})
 
 @app.get("/reservar/{num}", response_class=HTMLResponse)
 async def reservar(request: Request, num: int):
-    # --- O PULO DO GATO ESTÁ AQUI ---
-    # Assim que ele clica, o status muda para 'reservado' no banco
-    # O timestamp serve para você saber quando a reserva começou (opcional)
-    c.execute("UPDATE assentos SET status='reservado', timestamp=? WHERE numero=? AND status='livre'", (int(time.time()), num))
+    conn = sqlite3.connect("db.sqlite")
+    c = conn.cursor()
+    
+    # Tenta reservar apenas se estiver livre
+    agora = int(time.time())
+    c.execute("UPDATE assentos SET status='reservado', timestamp=? WHERE numero=? AND status='livre'", (agora, num))
     conn.commit()
     
-    return templates.TemplateResponse(
-        request=request, name="form.html", context={"num": num}
-    )
+    # Verifica se a reserva deu certo (se o assento era realmente livre)
+    c.execute("SELECT status FROM assentos WHERE numero=?", (num,))
+    resultado = c.fetchone()
+    conn.close()
+
+    if resultado and resultado[0] == 'reservado':
+        return templates.TemplateResponse(request=request, name="form.html", context={"num": num})
+    else:
+        return HTMLResponse("<script>alert('Este assento acabou de ser pego por outra pessoa!'); window.location.href='/';</script>")
 
 @app.post("/confirmar")
 async def confirmar(
@@ -68,35 +63,21 @@ async def confirmar(
     pagamento: str = Form(...),
     comprovante: UploadFile = File(...)
 ):
-    # 1. Salva a foto do comprovante
+    # Salva a foto
     extensao = comprovante.filename.split(".")[-1]
     nome_foto = f"comprovante_assento_{assento}.{extensao}"
     with open(nome_foto, "wb") as buffer:
         shutil.copyfileobj(comprovante.file, buffer)
 
-    # 2. Atualiza o Banco de Dados para 'pago' e preenche os dados
+    # Finaliza a compra (Muda para 'pago' e zera o timestamp para não ser deletado)
+    conn = sqlite3.connect("db.sqlite")
+    c = conn.cursor()
     c.execute("""
         UPDATE assentos 
-        SET status='pago', nome=?, nascimento=?, pai=?, mae=?, pagamento=? 
+        SET status='pago', nome=?, nascimento=?, pai=?, mae=?, pagamento=?, timestamp=0 
         WHERE numero=?
     """, (nome, nascimento, pai, mae, pagamento, assento))
     conn.commit()
+    conn.close()
 
-    # 3. Gera o arquivo TXT com os dados da reserva
-    with open(f"reserva_{assento}.txt", "w", encoding="utf-8") as f:
-        f.write(f"Assento: {assento}\nNome: {nome}\nPagamento: {pagamento}\nFoto: {nome_foto}")
-
-    # 4. Tela de Sucesso que fecha a aba após 3 segundos
-    return HTMLResponse("""
-        <html>
-            <body style='background:#1a1a2e;color:white;text-align:center;padding-top:100px;font-family:sans-serif;'>
-                <h1>✅ Comprovante Recebido!</h1>
-                <p>Sua reserva foi finalizada com sucesso. Esta aba será fechada.</p>
-                <script>setTimeout(()=>window.close(), 3000)</script>
-            </body>
-        </html>
-    """)
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    return HTMLResponse("<h1>✅ Sucesso! Assento confirmado.</h1><script>setTimeout(()=>window.location.href='/', 3000)</script>")
