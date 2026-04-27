@@ -1,102 +1,136 @@
-from fastapi import FastAPI, Request, Form, File, UploadFile
-from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
-import sqlite3
-import shutil
-import os
-import time
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Reserva de Assentos - Campori 2026</title>
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background: #1a1a2e; 
+            color: white; 
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
 
-app = FastAPI()
-templates = Jinja2Templates(directory="templates")
+        /* CONTAINER FIXO (TUDO QUE FICA NO TOPO) */
+        .header-fixo {
+            position: sticky;
+            top: 0;
+            width: 100%;
+            background: #1a1a2e;
+            z-index: 1000;
+            border-bottom: 2px solid #e94560;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+            padding-bottom: 10px;
+        }
 
-# Conexão com Banco de Dados
-def get_db():
-    conn = sqlite3.connect("db.sqlite", check_same_thread=False)
-    return conn
+        h1 { 
+            margin: 15px 0 10px 0; 
+            font-size: 20px; 
+            color: #e94560; 
+            text-align: center;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
 
-conn = get_db()
-c = conn.cursor()
+        .legend { 
+            display: flex; 
+            flex-direction: row; 
+            justify-content: center;
+            gap: 15px; 
+        }
 
-# Criar tabela com todas as colunas necessárias
-c.execute("""
-CREATE TABLE IF NOT EXISTS assentos (
-    numero INTEGER PRIMARY KEY,
-    status TEXT,
-    timestamp INTEGER,
-    nome TEXT,
-    nascimento TEXT,
-    pai TEXT,
-    mae TEXT,
-    pagamento TEXT
-)
-""")
+        .item { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: bold; }
+        .dot { width: 14px; height: 14px; border-radius: 3px; }
 
-# Iniciar assentos se o banco estiver vazio (1 a 60)
-c.execute("SELECT COUNT(*) FROM assentos")
-if c.fetchone()[0] == 0:
-    for i in range(1, 61):
-        c.execute("INSERT INTO assentos VALUES (?, 'livre', 0, '', '', '', '', '')", (i,))
-    conn.commit()
+        /* Cores da Legenda */
+        .dot.livre { background: #0f3460; border: 1px solid #4ecca3; }
+        .dot.reservado { background: #fca311; }
+        .dot.pago { background: #e94560; }
 
-@app.get("/", response_class=HTMLResponse)
-async def home(request: Request):
-    c.execute("SELECT numero, status FROM assentos")
-    dados = c.fetchall()
-    return templates.TemplateResponse(
-        request=request, name="index.html", context={"assentos": dados}
-    )
+        /* CONTEÚDO DO ÔNIBUS */
+        .bus-wrapper {
+            padding: 30px 10px;
+            display: flex;
+            justify-content: center;
+            width: 100%;
+        }
 
-@app.get("/reservar/{num}", response_class=HTMLResponse)
-async def reservar(request: Request, num: int):
-    # --- O PULO DO GATO ESTÁ AQUI ---
-    # Assim que ele clica, o status muda para 'reservado' no banco
-    # O timestamp serve para você saber quando a reserva começou (opcional)
-    c.execute("UPDATE assentos SET status='reservado', timestamp=? WHERE numero=? AND status='livre'", (int(time.time()), num))
-    conn.commit()
-    
-    return templates.TemplateResponse(
-        request=request, name="form.html", context={"num": num}
-    )
+        .bus-container {
+            background: #16213e;
+            padding: 40px 20px 25px 20px;
+            border-radius: 50px 50px 20px 20px;
+            border-top: 10px solid #e94560;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+            display: inline-block;
+        }
 
-@app.post("/confirmar")
-async def confirmar(
-    assento: int = Form(...), 
-    nome: str = Form(...), 
-    nascimento: str = Form(...), 
-    pai: str = Form(...), 
-    mae: str = Form(...), 
-    pagamento: str = Form(...),
-    comprovante: UploadFile = File(...)
-):
-    # 1. Salva a foto do comprovante
-    extensao = comprovante.filename.split(".")[-1]
-    nome_foto = f"comprovante_assento_{assento}.{extensao}"
-    with open(nome_foto, "wb") as buffer:
-        shutil.copyfileobj(comprovante.file, buffer)
+        .bus-grid { 
+            display: grid; 
+            grid-template-columns: repeat(2, 45px) 20px repeat(2, 45px); 
+            gap: 12px; 
+            justify-content: center;
+        }
 
-    # 2. Atualiza o Banco de Dados para 'pago' e preenche os dados
-    c.execute("""
-        UPDATE assentos 
-        SET status='pago', nome=?, nascimento=?, pai=?, mae=?, pagamento=? 
-        WHERE numero=?
-    """, (nome, nascimento, pai, mae, pagamento, assento))
-    conn.commit()
+        .seat { 
+            width: 45px; 
+            height: 45px; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            border-radius: 8px; 
+            cursor: pointer; 
+            font-size: 14px;
+            font-weight: bold;
+            transition: 0.3s;
+            user-select: none;
+        }
 
-    # 3. Gera o arquivo TXT com os dados da reserva
-    with open(f"reserva_{assento}.txt", "w", encoding="utf-8") as f:
-        f.write(f"Assento: {assento}\nNome: {nome}\nPagamento: {pagamento}\nFoto: {nome_foto}")
+        .livre { background: #0f3460; border: 1px solid #4ecca3; color: #4ecca3; }
+        .livre:hover { background: #4ecca3; color: #1a1a2e; transform: scale(1.1); }
+        .reservado { background: #fca311; color: #14213d; }
+        .pago { background: #e94560; color: white; cursor: not-allowed; opacity: 0.7; }
 
-    # 4. Tela de Sucesso que fecha a aba após 3 segundos
-    return HTMLResponse("""
-        <html>
-            <body style='background:#1a1a2e;color:white;text-align:center;padding-top:100px;font-family:sans-serif;'>
-                <h1>✅ Comprovante Recebido!</h1>
-                <p>Sua reserva foi finalizada com sucesso. Esta aba será fechada.</p>
-                <script>setTimeout(()=>window.close(), 3000)</script>
-            </body>
-        </html>
-    """)
+        .corredor { width: 20px; }
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+        @media (max-width: 480px) {
+            .seat { width: 42px; height: 42px; }
+            .bus-grid { grid-template-columns: repeat(2, 42px) 15px repeat(2, 42px); }
+            h1 { font-size: 18px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header-fixo">
+        <h1>🚌 Campori 2026</h1>
+        <div class="legend">
+            <div class="item"><div class="dot livre"></div> Livre</div>
+            <div class="item"><div class="dot reservado"></div> Reservado</div>
+            <div class="item"><div class="dot pago"></div> Ocupado</div>
+        </div>
+    </div>
+
+    <div class="bus-wrapper">
+        <div class="bus-container">
+            <div class="bus-grid">
+                {% for a in assentos %}
+                    <div class="seat {{a[1]}}" 
+                         onclick="if('{{a[1]}}' == 'livre') { window.location.href='/reservar/{{a[0]}}'; } else { alert('Ocupado!'); }">
+                        {{a[0]}}
+                    </div>
+
+                    {% if loop.index % 2 == 0 and loop.index % 4 != 0 %}
+                        <div class="corredor"></div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>
