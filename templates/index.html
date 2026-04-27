@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            text-align: center; 
+            background: #1a1a2e; 
+            color: white; 
+            padding: 20px;
+        }
+
+        h1 { margin-bottom: 30px; font-size: 24px; color: #e94560; }
+
+        /* Container do Ônibus */
+        .bus-container {
+            background: #16213e;
+            padding: 30px 20px;
+            border-radius: 40px 15px 15px 40px; /* Curva na frente do ônibus */
+            border-left: 10px solid #e94560;
+            display: inline-block;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        /* Grade de assentos: Horizontal */
+        .bus-grid { 
+            display: grid; 
+            /* Aqui criamos as fileiras de cima e de baixo com um corredor no meio */
+            grid-template-rows: repeat(2, 40px) 25px repeat(2, 40px); 
+            grid-auto-flow: column; /* Força a preencher as colunas (horizontal) */
+            gap: 8px; 
+            justify-content: center; 
+        }
+
+        .seat { 
+            width: 40px; 
+            height: 40px; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            border-radius: 6px; 
+            cursor: pointer; 
+            font-size: 12px;
+            font-weight: bold;
+            transition: transform 0.2s, background 0.3s;
+            user-select: none;
+        }
+
+        .seat:hover:not(.pago) { transform: scale(1.1); }
+
+        /* Cores dos status */
+        .livre { background: #0f3460; border: 1px solid #16213e; color: #4ecca3; }
+        .livre:hover { background: #4ecca3; color: #1a1a2e; }
+        
+        .reservado { background: #fca311; color: #14213d; animation: pulse 1s infinite; }
+        
+        .pago { background: #e94560; color: white; cursor: not-allowed; opacity: 0.8; border: none; }
+
+        /* Corredor vazio */
+        .corredor { grid-row: 3; }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+
+        .legend { margin-top: 30px; display: flex; justify-content: center; gap: 15px; font-size: 14px; }
+        .item { display: flex; align-items: center; gap: 5px; }
+        .dot { width: 12px; height: 12px; border-radius: 3px; }
+    </style>
+</head>
+<body>
+
+    <h1>🚌 Campori 2026</h1>
+
+    <div class="bus-container">
+        <div class="bus-grid">
+            {% for a in assentos %}
+                {# Adiciona o espaço do corredor após a segunda fileira de cada coluna #}
+               <div class="seat {{a[1]}}" 
+     onclick="if('{{a[1]}}' == 'livre') { window.open('/reservar/{{a[0]}}', '_blank'); } else { alert('Este assento já está ocupado!'); }">
+    {{a[0]}}
+</div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="legend">
+        <div class="item"><div class="dot livre" style="background:#0f3460"></div> Livre</div>
+        <div class="item"><div class="dot reservado" style="background:#fca311"></div> Reservado</div>
+        <div class="item"><div class="dot pago" style="background:#e94560"></div> Ocupado</div>
+    </div>
+
+</body>
+</html>

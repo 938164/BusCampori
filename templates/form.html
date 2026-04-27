@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #1a1a2e; color: white; text-align: center; padding: 20px; }
+        .container { background: #16213e; padding: 25px; border-radius: 15px; display: inline-block; text-align: left; width: 95%; max-width: 450px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
+        label { font-size: 13px; color: #4ecca3; display: block; margin-top: 10px; }
+        input { width: 100%; padding: 10px; margin-top: 5px; border-radius: 5px; border: 1px solid #0f3460; background: #1a1a2e; color: white; box-sizing: border-box; }
+        .payment-methods { display: flex; gap: 10px; margin: 20px 0; }
+        .method-btn { flex: 1; padding: 15px; border: 2px solid #4ecca3; border-radius: 8px; cursor: pointer; text-align: center; font-weight: bold; transition: 0.3s; }
+        .method-btn.active { background: #4ecca3; color: #1a1a2e; }
+        .payment-details { display: none; background: #0f3460; padding: 15px; border-radius: 8px; margin-top: 10px; border: 1px dashed #4ecca3; }
+        #secao-comprovante { margin-top: 20px; display: none; background: #4ecca322; padding: 15px; border-radius: 10px; border: 2px dashed #4ecca3; text-align: center; }
+        
+        @keyframes shake {
+            0% { transform: translateX(0); }
+            25% { transform: translateX(-10px); }
+            50% { transform: translateX(10px); }
+            75% { transform: translateX(-10px); }
+            100% { transform: translateX(0); }
+        }
+        .vibrar { animation: shake 0.4s ease-in-out; border-color: #ff4d6d !important; }
+        #msg-erro { display: none; color: #ff4d6d; font-weight: bold; font-size: 14px; margin-top: 10px; text-align: center; padding: 10px; border: 1px solid #ff4d6d; border-radius: 5px; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2>Passagem Assento {{num}}</h2>
+        
+        <form id="meuForm" action="/confirmar" method="post" enctype="multipart/form-data">
+            <input type="hidden" name="assento" value="{{num}}">
+            <input type="hidden" name="pagamento" id="tipo_pagamento" value="">
+            
+            <label>Nome do Passageiro:</label>
+            <input name="nome" placeholder="Nome completo" required>
+
+            <label>Data de Nascimento:</label>
+            <input type="date" name="nascimento" required>
+
+            <label>Nome do Pai:</label>
+            <input name="pai" placeholder="Nome do pai" required>
+
+            <label>Nome da Mãe:</label>
+            <input name="mae" placeholder="Nome da mãe" required>
+
+            <p style="font-size: 14px; margin-top: 20px;">Escolha a forma de pagamento:</p>
+            
+            <div class="payment-methods" id="grupo-pagamento">
+                <div class="method-btn" id="btn-pix" onclick="selecionar('pix')">PIX</div>
+                <div class="method-btn" id="btn-cartao" onclick="selecionar('cartao')">CARTÃO</div>
+            </div>
+
+            <div id="msg-erro">✨ Por favor, selecione uma forma de pagamento! ✨</div>
+
+            <div id="area-pix" class="payment-details" style="text-align: center; border: 1px dashed #4ecca3; padding: 20px; border-radius: 10px; background: rgba(15, 52, 96, 0.5);">
+    <p style="color: #4ecca3; font-weight: bold; margin-bottom: 15px; font-size: 16px;">Escaneie o QR Code:</p>
+    
+    <div style="background: white; padding: 12px; display: inline-block; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=00020126580014BR.GOV.BCB.PIX0136b60e2ca6-48b3-4afe-9344-a396e379af2852040000530398654041.005802BR5919Lucas Dias da Silva6009SAO PAULO62140510K6xlhP1J9s63040375" 
+             width="180" 
+             style="display: block;">
+    </div>
+
+    <p style="font-size: 13px; color: #ccc; margin-top: 15px;">Chave Copia e Cola:</p>
+    <code id="chave-pix" 
+          style="background: #1a1a2e; padding: 10px; display: block; font-size: 11px; word-break: break-all; cursor: pointer; border: 1px solid #4ecca3; border-radius: 5px; margin-top: 5px; color: #4ecca3;" 
+          onclick="copiarTexto()">
+        00020126580014BR.GOV.BCB.PIX0136b60e2ca6-48b3-4afe-9344-a396e379af2852040000530398654041.005802BR5919Lucas Dias da Silva6009SAO PAULO62140510K6xlhP1J9s63040375
+    </code>
+    <small style="display: block; margin-top: 5px; color: #888;">(Clique na chave acima para copiar)</small>
+</div>
+
+            <div id="area-cartao" class="payment-details">
+                <label>Número do Cartão:</label>
+                <input type="text" name="cartao_numero" placeholder="0000 0000 0000 0000">
+                <div style="display: flex; gap: 10px;">
+                    <div style="flex: 2;"><label>Validade:</label><input type="text" name="cartao_validade" placeholder="MM/AA"></div>
+                    <div style="flex: 1;"><label>CVV:</label><input type="text" name="cartao_cvv" placeholder="123"></div>
+                </div>
+            </div>
+
+            <div id="secao-comprovante">
+                <label style="color: #4ecca3; font-weight: bold;">📥 ANEXE O COMPROVANTE PARA FINALIZAR:</label>
+                <p style="font-size: 11px;">(A reserva será enviada assim que anexar)</p>
+                <input type="file" name="comprovante" id="input-file" accept="image/*" required style="margin-top: 10px;" onchange="enviarAutomatico()">
+            </div>
+        </form>
+    </div>
+
+    <script>
+        function selecionar(tipo) {
+            document.getElementById('tipo_pagamento').value = tipo;
+            
+            // Mostra a área correta e a seção de comprovante
+            document.getElementById('area-pix').style.display = (tipo === 'pix') ? 'block' : 'none';
+            document.getElementById('area-cartao').style.display = (tipo === 'cartao') ? 'block' : 'none';
+            document.getElementById('secao-comprovante').style.display = 'block';
+            
+            // Estilo dos botões
+            document.getElementById('btn-pix').classList.toggle('active', tipo === 'pix');
+            document.getElementById('btn-cartao').classList.toggle('active', tipo === 'cartao');
+            document.getElementById('msg-erro').style.display = 'none';
+        }
+
+        function enviarAutomatico() {
+            const arquivo = document.getElementById('input-file');
+            if (arquivo.files.length > 0) {
+                // Validação simples antes de enviar
+                const nome = document.getElementsByName('nome')[0].value;
+                if(!nome) {
+                    alert("Preencha seu nome antes de anexar!");
+                    arquivo.value = "";
+                    return;
+                }
+                document.getElementById('meuForm').submit();
+            }
+        }
+
+        function copiarTexto() {
+            const texto = document.getElementById('chave-pix').innerText;
+            navigator.clipboard.writeText(texto).then(() => alert("Chave copiada!"));
+        }
+    </script>
+</body>
+</html>
