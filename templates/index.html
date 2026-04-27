@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Reserva de Assentos - Campori 2026</title>
     <style>
-        /* Estilos Gerais */
         body { 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
             background: #1a1a2e; 
@@ -15,73 +14,56 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            min-height: 100vh;
         }
 
-        h1 { 
-            margin: 20px 0; 
-            font-size: 22px; 
-            color: #e94560; 
-            text-transform: uppercase;
-            letter-spacing: 2px;
-        }
+        h1 { margin: 20px 0; font-size: 22px; color: #e94560; text-align: center; }
 
-        /* Container Principal Responsivo */
-        .main-content {
+        /* Container que coloca Legenda e Ônibus lado a lado */
+        .layout-horizontal {
             display: flex;
-            flex-direction: row; /* Lado a lado no PC */
+            flex-direction: row; /* Força ficar um ao lado do outro */
             align-items: flex-start;
             justify-content: center;
             gap: 20px;
             width: 100%;
-            max-width: 800px;
+            max-width: 600px;
         }
 
-        /* LEGENDA LATERAL */
+        /* LEGENDA NA LATERAL ESQUERDA */
         .legend { 
             display: flex; 
-            flex-direction: column;
+            flex-direction: column; /* Itens um abaixo do outro */
             gap: 15px; 
-            background: #16213e;
-            padding: 20px;
-            border-radius: 15px;
+            background: rgba(22, 33, 62, 0.9);
+            padding: 15px;
+            border-radius: 12px;
             border-left: 4px solid #e94560;
-            min-width: 120px;
-            position: sticky;
+            position: sticky; /* A legenda "segue" a tela ao rolar */
             top: 20px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            min-width: 100px;
         }
 
-        .item { 
-            display: flex; 
-            align-items: center; 
-            gap: 10px; 
-            font-size: 14px;
-            font-weight: 500;
-        }
+        .item { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: bold; }
+        .dot { width: 16px; height: 16px; border-radius: 4px; }
 
-        .dot { 
-            width: 18px; 
-            height: 18px; 
-            border-radius: 4px; 
-        }
+        /* Estilo dos Quadrinhos da Legenda */
+        .dot.livre { background: #0f3460; border: 1px solid #4ecca3; }
+        .dot.reservado { background: #fca311; }
+        .dot.pago { background: #e94560; }
 
-        /* CONTAINER DO ÔNIBUS */
+        /* ÔNIBUS */
         .bus-container {
             background: #16213e;
             padding: 30px 15px 15px 15px;
             border-radius: 40px 40px 15px 15px;
             border-top: 8px solid #e94560;
             box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-            margin-bottom: 20px;
         }
 
-        /* Grade de Assentos */
         .bus-grid { 
             display: grid; 
-            grid-template-columns: repeat(2, 42px) 20px repeat(2, 42px); 
+            grid-template-columns: repeat(2, 42px) 18px repeat(2, 42px); 
             gap: 8px; 
-            justify-content: center; 
         }
 
         .seat { 
@@ -94,46 +76,28 @@
             cursor: pointer; 
             font-size: 13px;
             font-weight: bold;
-            transition: all 0.2s;
-            user-select: none;
+            transition: 0.2s;
         }
 
-        /* Cores de Status */
+        /* Cores dos Assentos */
         .livre { background: #0f3460; border: 1px solid #4ecca3; color: #4ecca3; }
-        .livre:hover { background: #4ecca3; color: #1a1a2e; transform: scale(1.1); }
         .reservado { background: #fca311; color: #14213d; }
         .pago { background: #e94560; color: white; cursor: not-allowed; opacity: 0.7; }
 
-        .corredor { width: 20px; }
+        .corredor { width: 18px; }
 
         /* RESPONSIVIDADE PARA CELULAR */
-        @media (max-width: 600px) {
-            .main-content {
-                flex-direction: column; /* Legenda vai para cima do ônibus */
-                align-items: center;
-                gap: 15px;
+        @media (max-width: 480px) {
+            .layout-horizontal {
+                gap: 10px; /* Diminui espaço no celular */
             }
-
             .legend {
-                flex-direction: row; /* Legenda deitada no celular */
-                width: 90%;
-                justify-content: space-around;
-                position: static;
-                padding: 12px;
-                border-left: none;
-                border-bottom: 3px solid #e94560;
+                padding: 10px;
+                min-width: 80px;
             }
-
-            h1 { font-size: 20px; }
-
-            .seat {
-                width: 45px; /* Um pouco maior no celular para o dedo acertar */
-                height: 45px;
-            }
-            
-            .bus-grid {
-                grid-template-columns: repeat(2, 45px) 15px repeat(2, 45px);
-            }
+            .item { font-size: 11px; }
+            .seat { width: 38px; height: 38px; font-size: 11px; }
+            .bus-grid { grid-template-columns: repeat(2, 38px) 12px repeat(2, 38px); }
         }
     </style>
 </head>
@@ -141,28 +105,21 @@
 
     <h1>🚌 Campori 2026</h1>
 
-    <div class="main-content">
+    <div class="layout-horizontal">
         <div class="legend">
-            <div class="item">
-                <div class="dot livre"></div> Livre
-            </div>
-            <div class="item">
-                <div class="dot reservado"></div> Reservado
-            </div>
-            <div class="item">
-                <div class="dot pago"></div> Ocupado
-            </div>
+            <div class="item"><div class="dot livre"></div> Livre</div>
+            <div class="item"><div class="dot reservado"></div> Reservado</div>
+            <div class="item"><div class="dot pago"></div> Ocupado</div>
         </div>
 
         <div class="bus-container">
             <div class="bus-grid">
                 {% for a in assentos %}
                     <div class="seat {{a[1]}}" 
-                         onclick="if('{{a[1]}}' == 'livre') { window.location.href='/reservar/{{a[0]}}'; } else { alert('Este assento já está ocupado!'); }">
+                         onclick="if('{{a[1]}}' == 'livre') { window.location.href='/reservar/{{a[0]}}'; } else { alert('Ocupado!'); }">
                         {{a[0]}}
                     </div>
 
-                    {# Adiciona o corredor central após o segundo assento de cada linha #}
                     {% if loop.index % 2 == 0 and loop.index % 4 != 0 %}
                         <div class="corredor"></div>
                     {% endif %}
