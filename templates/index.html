@@ -5,114 +5,170 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Reserva de Assentos - Campori 2026</title>
     <style>
+        /* Estilos Gerais */
         body { 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            text-align: center; 
             background: #1a1a2e; 
             color: white; 
-            padding: 20px;
             margin: 0;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
         }
 
-        h1 { margin-bottom: 20px; font-size: 24px; color: #e94560; }
+        h1 { 
+            margin: 20px 0; 
+            font-size: 22px; 
+            color: #e94560; 
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
 
-        /* Container do Ônibus - Agora Vertical */
+        /* Container Principal Responsivo */
+        .main-content {
+            display: flex;
+            flex-direction: row; /* Lado a lado no PC */
+            align-items: flex-start;
+            justify-content: center;
+            gap: 20px;
+            width: 100%;
+            max-width: 800px;
+        }
+
+        /* LEGENDA LATERAL */
+        .legend { 
+            display: flex; 
+            flex-direction: column;
+            gap: 15px; 
+            background: #16213e;
+            padding: 20px;
+            border-radius: 15px;
+            border-left: 4px solid #e94560;
+            min-width: 120px;
+            position: sticky;
+            top: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+
+        .item { 
+            display: flex; 
+            align-items: center; 
+            gap: 10px; 
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .dot { 
+            width: 18px; 
+            height: 18px; 
+            border-radius: 4px; 
+        }
+
+        /* CONTAINER DO ÔNIBUS */
         .bus-container {
             background: #16213e;
-            padding: 40px 20px 20px 20px;
-            border-radius: 50px 50px 15px 15px; /* Frente arredondada no topo */
-            border-top: 10px solid #e94560; /* Detalhe da frente do ônibus */
-            display: inline-block;
+            padding: 30px 15px 15px 15px;
+            border-radius: 40px 40px 15px 15px;
+            border-top: 8px solid #e94560;
             box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-            margin-bottom: 30px;
+            margin-bottom: 20px;
         }
 
-        /* Grade de assentos: 4 colunas com corredor no meio */
+        /* Grade de Assentos */
         .bus-grid { 
             display: grid; 
-            /* Estrutura: [Assento] [Assento] [Corredor] [Assento] [Assento] */
-            grid-template-columns: repeat(2, 45px) 25px repeat(2, 45px); 
-            gap: 10px; 
+            grid-template-columns: repeat(2, 42px) 20px repeat(2, 42px); 
+            gap: 8px; 
             justify-content: center; 
-            align-items: center;
         }
 
         .seat { 
-            width: 45px; 
-            height: 45px; 
+            width: 42px; 
+            height: 42px; 
             display: flex; 
             align-items: center; 
             justify-content: center; 
-            border-radius: 8px; 
+            border-radius: 6px; 
             cursor: pointer; 
-            font-size: 14px;
+            font-size: 13px;
             font-weight: bold;
-            transition: transform 0.2s, background 0.3s;
+            transition: all 0.2s;
             user-select: none;
         }
 
-        .seat:hover:not(.pago) { transform: scale(1.1); }
+        /* Cores de Status */
+        .livre { background: #0f3460; border: 1px solid #4ecca3; color: #4ecca3; }
+        .livre:hover { background: #4ecca3; color: #1a1a2e; transform: scale(1.1); }
+        .reservado { background: #fca311; color: #14213d; }
+        .pago { background: #e94560; color: white; cursor: not-allowed; opacity: 0.7; }
 
-        /* Cores dos status */
-        .livre { background: #0f3460; border: 1px solid #1c2d5e; color: #4ecca3; }
-        .livre:hover { background: #4ecca3; color: #1a1a2e; }
-        
-        .reservado { background: #fca311; color: #14213d; animation: pulse 1s infinite; }
-        
-        .pago { background: #e94560; color: white; cursor: not-allowed; opacity: 0.8; border: none; }
+        .corredor { width: 20px; }
 
-        /* Espaçador do Corredor */
-        .corredor { width: 25px; }
+        /* RESPONSIVIDADE PARA CELULAR */
+        @media (max-width: 600px) {
+            .main-content {
+                flex-direction: column; /* Legenda vai para cima do ônibus */
+                align-items: center;
+                gap: 15px;
+            }
 
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.7; }
-            100% { opacity: 1; }
+            .legend {
+                flex-direction: row; /* Legenda deitada no celular */
+                width: 90%;
+                justify-content: space-around;
+                position: static;
+                padding: 12px;
+                border-left: none;
+                border-bottom: 3px solid #e94560;
+            }
+
+            h1 { font-size: 20px; }
+
+            .seat {
+                width: 45px; /* Um pouco maior no celular para o dedo acertar */
+                height: 45px;
+            }
+            
+            .bus-grid {
+                grid-template-columns: repeat(2, 45px) 15px repeat(2, 45px);
+            }
         }
-
-        .legend { 
-            display: flex; 
-            justify-content: center; 
-            flex-wrap: wrap; 
-            gap: 15px; 
-            font-size: 14px; 
-            background: rgba(22, 33, 62, 0.8);
-            padding: 15px;
-            border-radius: 10px;
-            max-width: 400px;
-            margin: 0 auto;
-        }
-        .item { display: flex; align-items: center; gap: 8px; }
-        .dot { width: 15px; height: 15px; border-radius: 4px; }
     </style>
 </head>
 <body>
 
     <h1>🚌 Campori 2026</h1>
 
-    <div class="bus-container">
-        <div class="bus-grid">
-            {% for a in assentos %}
-                
-                {# Desenha o assento #}
-                <div class="seat {{a[1]}}" 
-                     onclick="if('{{a[1]}}' == 'livre') { window.location.href='/reservar/{{a[0]}}'; } else { alert('Este assento já está ocupado!'); }">
-                    {{a[0]}}
-                </div>
-
-                {# Adiciona o espaço do corredor (vão central) após cada 2 assentos na fileira #}
-                {% if loop.index % 2 == 0 and loop.index % 4 != 0 %}
-                    <div class="corredor"></div>
-                {% endif %}
-
-            {% endfor %}
+    <div class="main-content">
+        <div class="legend">
+            <div class="item">
+                <div class="dot livre"></div> Livre
+            </div>
+            <div class="item">
+                <div class="dot reservado"></div> Reservado
+            </div>
+            <div class="item">
+                <div class="dot pago"></div> Ocupado
+            </div>
         </div>
-    </div>
 
-    <div class="legend">
-        <div class="item"><div class="dot livre" style="background:#0f3460; border: 1px solid #4ecca3;"></div> Livre</div>
-        <div class="item"><div class="dot reservado" style="background:#fca311"></div> Reservado</div>
-        <div class="item"><div class="dot pago" style="background:#e94560"></div> Ocupado</div>
+        <div class="bus-container">
+            <div class="bus-grid">
+                {% for a in assentos %}
+                    <div class="seat {{a[1]}}" 
+                         onclick="if('{{a[1]}}' == 'livre') { window.location.href='/reservar/{{a[0]}}'; } else { alert('Este assento já está ocupado!'); }">
+                        {{a[0]}}
+                    </div>
+
+                    {# Adiciona o corredor central após o segundo assento de cada linha #}
+                    {% if loop.index % 2 == 0 and loop.index % 4 != 0 %}
+                        <div class="corredor"></div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </div>
     </div>
 
 </body>
