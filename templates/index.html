@@ -119,15 +119,15 @@
         <div class="bus-container">
             <div class="bus-grid">
                 {% for a in assentos %}
-                    <div class="seat {{a[1]}}" 
-                         onclick="if('{{a[1]}}' == 'livre') { window.location.href='/reservar/{{a[0]}}'; } else { alert('Ocupado!'); }">
-                        {{a[0]}}
-                    </div>
+    <div class="seat {{ a[1] }}" 
+         onclick="if('{{ a[1] }}' === 'livre') { window.location.href='/reservar/{{ a[0] }}'; } else { alert('Ocupado!'); }">
+        {{ a[0] }}
+    </div>
 
-                    {% if loop.index % 2 == 0 and loop.index % 4 != 0 %}
-                        <div class="corredor"></div>
-                    {% endif %}
-                {% endfor %}
+    {% if loop.index % 2 == 0 and loop.index % 4 != 0 %}
+        <div class="corredor"></div>
+    {% endif %}
+{% endfor %}
             </div>
         </div>
     </div>
