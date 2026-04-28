@@ -6,7 +6,7 @@ import shutil
 import time
 import os
 
-# 1. Configura o caminho absoluto das pastas (Evita erro de pasta não encontrada)
+# Configuração de caminhos
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "db.sqlite")
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
@@ -14,9 +14,15 @@ TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
 app = FastAPI()
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
-# 2. Inicialização Segura do Banco
+# Tempo de bloqueio: 300 segundos = 5 minutos
+TEMPO_LIMITE_RESERVA = 300 
+
+def conectar_banco():
+    # O timeout=10 impede o "Internal Server Error" se o banco estiver ocupado
+    return sqlite3.connect(DB_PATH, check_same_thread=False, timeout=10)
+
 def inicializar_banco():
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    conn = conectar_banco()
     c = conn.cursor()
     c.execute("""
     CREATE TABLE IF NOT EXISTS assentos (
@@ -39,13 +45,12 @@ def inicializar_banco():
 
 inicializar_banco()
 
-TEMPO_LIMITE_RESERVA = 600 
-
 def limpar_reservas_expiradas():
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    conn = conectar_banco()
     c = conn.cursor()
     agora = int(time.time())
     limite = agora - TEMPO_LIMITE_RESERVA
+    # Libera quem está como 'reservado' e passou de 5 minutos
     c.execute("UPDATE assentos SET status='livre', timestamp=0 WHERE status='reservado' AND timestamp < ?", (limite,))
     conn.commit()
     conn.close()
@@ -53,7 +58,7 @@ def limpar_reservas_expiradas():
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     limpar_reservas_expiradas()
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    conn = conectar_banco()
     c = conn.cursor()
     c.execute("SELECT numero, status FROM assentos")
     dados = c.fetchall()
@@ -62,10 +67,12 @@ async def home(request: Request):
 
 @app.get("/reservar/{num}", response_class=HTMLResponse)
 async def reservar(request: Request, num: int):
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    limpar_reservas_expiradas()
+    conn = conectar_banco()
     c = conn.cursor()
     agora = int(time.time())
-    # Tenta reservar apenas se estiver livre
+    
+    # Só reserva se o assento estiver realmente 'livre'
     c.execute("UPDATE assentos SET status='reservado', timestamp=? WHERE numero=? AND status='livre'", (agora, num))
     conn.commit()
     
@@ -76,7 +83,7 @@ async def reservar(request: Request, num: int):
     if status_atual == 'reservado':
         return templates.TemplateResponse("form.html", {"request": request, "num": num})
     else:
-        return HTMLResponse("<script>alert('Assento já reservado por outro usuário!'); window.location.href='/';</script>")
+        return HTMLResponse("<script>alert('Este assento já expirou ou foi pego por outro!'); window.location.href='/';</script>")
 
 @app.post("/confirmar")
 async def confirmar(
@@ -88,7 +95,7 @@ async def confirmar(
     pagamento: str = Form(...),
     comprovante: UploadFile = File(...)
 ):
-    # Salva o arquivo na pasta raiz do projeto
+    # Salva o comprovante
     extensao = comprovante.filename.split(".")[-1]
     nome_foto = f"comprovante_assento_{assento}.{extensao}"
     caminho_foto = os.path.join(BASE_DIR, nome_foto)
@@ -96,8 +103,9 @@ async def confirmar(
     with open(caminho_foto, "wb") as buffer:
         shutil.copyfileobj(comprovante.file, buffer)
 
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    conn = conectar_banco()
     c = conn.cursor()
+    # Atualiza para 'pago' (isso trava o assento definitivamente)
     c.execute("""
         UPDATE assentos 
         SET status='pago', nome=?, nascimento=?, pai=?, mae=?, pagamento=?, timestamp=0 
@@ -109,8 +117,8 @@ async def confirmar(
     return HTMLResponse("""
         <html>
             <body style='background:#1a1a2e;color:white;text-align:center;padding-top:100px;font-family:sans-serif;'>
-                <h1>✅ Sucesso! Assento confirmado.</h1>
-                <p>Sua reserva foi processada. Você será redirecionado.</p>
+                <h1>✅ Reserva Confirmada!</h1>
+                <p>Obrigado! Sua vaga está garantida.</p>
                 <script>setTimeout(()=>window.location.href='/', 3000)</script>
             </body>
         </html>
