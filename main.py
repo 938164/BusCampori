@@ -43,7 +43,7 @@ async def home(request: Request):
     dados = c.fetchall()
     conn.close()
     # O uso de name= e context= é obrigatório nas versões novas
-    return templates.TemplateResponse(name="index.html", context={"request": request, "assentos": dados})
+    return templates.TemplateResponse(request=request, name="index.html", context={"assentos": dados})
 
 @app.get("/reservar/{num}", response_class=HTMLResponse)
 async def reservar(request: Request, num: int):
@@ -56,7 +56,7 @@ async def reservar(request: Request, num: int):
     res = c.fetchone()
     conn.close()
     if res and res[0] == 'reservado':
-        return templates.TemplateResponse(name="form.html", context={"request": request, "num": num})
+       return templates.TemplateResponse(request=request, name="form.html", context={"num": num})
     return HTMLResponse("<script>alert('Indisponível'); window.location.href='/';</script>")
 
 @app.post("/confirmar")
