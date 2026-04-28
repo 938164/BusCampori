@@ -6,22 +6,20 @@ import shutil
 import time
 import os
 
-# Configuração de caminhos absolutos
+# CONFIGURAÇÃO DE CAMINHOS - O segredo para o Render não dar erro
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "db.sqlite")
+# No Render, a pasta /tmp tem permissão de escrita garantida
+DB_PATH = "/tmp/db.sqlite" 
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
 
 app = FastAPI()
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
-# Tempo de bloqueio: 300 segundos = 5 minutos
-TEMPO_LIMITE_RESERVA = 300 
+TEMPO_LIMITE_RESERVA = 300 # 5 minutos
 
 def conectar_banco():
-    # check_same_thread=False e timeout=10 evitam o "Internal Server Error"
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=10)
-    # PRAGMA WAL permite que várias pessoas acessem o site ao mesmo tempo sem travar
-    conn.execute("PRAGMA journal_mode=WAL;")
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=20)
+    conn.execute("PRAGMA journal_mode=WAL;") # Modo de alta performance
     return conn
 
 def inicializar_banco():
@@ -46,23 +44,27 @@ def inicializar_banco():
         conn.commit()
     conn.close()
 
-# Inicia o banco de dados assim que o servidor liga
-inicializar_banco()
+# Tenta inicializar o banco. Se falhar, o log do Render dirá o porquê.
+try:
+    inicializar_banco()
+except Exception as e:
+    print(f"Erro ao iniciar banco: {e}")
 
 def limpar_reservas_expiradas():
-    """Libera assentos que foram clicados mas não finalizados em 5 minutos."""
-    conn = conectar_banco()
-    c = conn.cursor()
-    agora = int(time.time())
-    limite = agora - TEMPO_LIMITE_RESERVA
-    # Se o status for 'reservado' e o tempo passou do limite, volta para 'livre'
-    c.execute("UPDATE assentos SET status='livre', timestamp=0 WHERE status='reservado' AND timestamp < ?", (limite,))
-    conn.commit()
-    conn.close()
+    try:
+        conn = conectar_banco()
+        c = conn.cursor()
+        agora = int(time.time())
+        limite = agora - TEMPO_LIMITE_RESERVA
+        c.execute("UPDATE assentos SET status='livre', timestamp=0 WHERE status='reservado' AND timestamp < ?", (limite,))
+        conn.commit()
+        conn.close()
+    except:
+        pass
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
-    limpar_reservas_expiradas() # Faxina nos desistentes
+    limpar_reservas_expiradas()
     conn = conectar_banco()
     c = conn.cursor()
     c.execute("SELECT numero, status FROM assentos")
@@ -76,55 +78,31 @@ async def reservar(request: Request, num: int):
     conn = conectar_banco()
     c = conn.cursor()
     agora = int(time.time())
-    
-    # Só muda para reservado se o assento estiver LIVRE
     c.execute("UPDATE assentos SET status='reservado', timestamp=? WHERE numero=? AND status='livre'", (agora, num))
     conn.commit()
-    
     c.execute("SELECT status FROM assentos WHERE numero=?", (num,))
-    resultado = c.fetchone()
+    res = c.fetchone()
     conn.close()
-
-    if resultado and resultado[0] == 'reservado':
+    if res and res[0] == 'reservado':
         return templates.TemplateResponse("form.html", {"request": request, "num": num})
-    else:
-        # Se alguém já pegou, avisa o usuário
-        return HTMLResponse("<script>alert('Assento ocupado ou reserva expirada!'); window.location.href='/';</script>")
+    return HTMLResponse("<script>alert('Assento ocupado!'); window.location.href='/';</script>")
 
 @app.post("/confirmar")
 async def confirmar(
-    assento: int = Form(...), 
-    nome: str = Form(...), 
-    nascimento: str = Form(...), 
-    pai: str = Form(...), 
-    mae: str = Form(...), 
-    pagamento: str = Form(...),
+    assento: int = Form(...), nome: str = Form(...), nascimento: str = Form(...), 
+    pai: str = Form(...), mae: str = Form(...), pagamento: str = Form(...),
     comprovante: UploadFile = File(...)
 ):
-    # 1. Salva o arquivo de comprovante no Render
-    extensao = comprovante.filename.split(".")[-1]
-    nome_foto = f"comprovante_{assento}_{int(time.time())}.{extensao}"
-    caminho_foto = os.path.join(BASE_DIR, nome_foto)
+    # Salva foto na pasta temporária para evitar erro de permissão
+    nome_foto = f"comprovante_{assento}.jpg"
+    caminho_foto = os.path.join("/tmp", nome_foto)
     with open(caminho_foto, "wb") as buffer:
         shutil.copyfileobj(comprovante.file, buffer)
 
-    # 2. Salva definitivamente no banco
     conn = conectar_banco()
     c = conn.cursor()
-    c.execute("""
-        UPDATE assentos 
-        SET status='pago', nome=?, nascimento=?, pai=?, mae=?, pagamento=?, timestamp=0 
-        WHERE numero=?
-    """, (nome, nascimento, pai, mae, pagamento, assento))
+    c.execute("UPDATE assentos SET status='pago', nome=?, nascimento=?, pai=?, mae=?, pagamento=?, timestamp=0 WHERE numero=?", 
+              (nome, nascimento, pai, mae, pagamento, assento))
     conn.commit()
     conn.close()
-
-    return HTMLResponse("""
-        <html>
-            <body style='background:#1a1a2e;color:white;text-align:center;padding-top:100px;font-family:sans-serif;'>
-                <h1>✅ Reserva Confirmada!</h1>
-                <p>Obrigado! Sua vaga para o Campori está garantida.</p>
-                <script>setTimeout(()=>window.location.href='/', 3000)</script>
-            </body>
-        </html>
-    """)
+    return HTMLResponse("<h1>Reserva Confirmada!</h1><script>setTimeout(()=>window.location.href='/', 3000)</script>")
