@@ -6,7 +6,7 @@ from fastapi import FastAPI, Request, Form, File, UploadFile
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-# Definição de caminhos absoluta para evitar erros no Render
+# Definição de caminhos absoluta para evitar erros no Render.
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = "/tmp/campori_vFinal.db"
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
