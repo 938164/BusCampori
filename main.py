@@ -3,100 +3,94 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 import sqlite3
 import shutil
-import os
 import time
+import os
+
+# CONFIGURAÇÃO DE CAMINHOS
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = "/tmp/campori_v3.db" 
+TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
 
 app = FastAPI()
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
-# Conexão com Banco de Dados
-def get_db():
-    conn = sqlite3.connect("db.sqlite", check_same_thread=False)
-    return conn
+# 1. INICIALIZAÇÃO DO BANCO
+def inicializar_banco():
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=20)
+    c = conn.cursor()
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS assentos (
+        numero INTEGER PRIMARY KEY,
+        status TEXT,
+        timestamp INTEGER
+    )
+    """)
+    c.execute("SELECT COUNT(*) FROM assentos")
+    if c.fetchone()[0] == 0:
+        for i in range(1, 61):
+            c.execute("INSERT INTO assentos (numero, status, timestamp) VALUES (?, 'livre', 0)", (i,))
+        conn.commit()
+    conn.close()
 
-conn = get_db()
-c = conn.cursor()
+inicializar_banco()
 
-# Criar tabela com todas as colunas necessárias
-c.execute("""
-CREATE TABLE IF NOT EXISTS assentos (
-    numero INTEGER PRIMARY KEY,
-    status TEXT,
-    timestamp INTEGER,
-    nome TEXT,
-    nascimento TEXT,
-    pai TEXT,
-    mae TEXT,
-    pagamento TEXT
-)
-""")
-
-# Iniciar assentos se o banco estiver vazio (1 a 60)
-c.execute("SELECT COUNT(*) FROM assentos")
-if c.fetchone()[0] == 0:
-    for i in range(1, 61):
-        c.execute("INSERT INTO assentos VALUES (?, 'livre', 0, '', '', '', '', '')", (i,))
+# 2. FUNÇÃO DE LIMPEZA (5 MINUTOS)
+def limpar_reservas():
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=20)
+    agora = int(time.time())
+    limite = agora - 300 # 5 minutos
+    conn.execute("UPDATE assentos SET status='livre', timestamp=0 WHERE status='reservado' AND timestamp < ?", (limite,))
     conn.commit()
+    conn.close()
 
+# 3. ROTA DA PÁGINA INICIAL (CORRIGIDA)
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
+    limpar_reservas()
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    c = conn.cursor()
     c.execute("SELECT numero, status FROM assentos")
     dados = c.fetchall()
+    conn.close()
+    
+    # FORMATO CORRETO PARA AS VERSÕES NOVAS DO FASTAPI:
     return templates.TemplateResponse(
-        request=request, name="index.html", context={"assentos": dados}
+        name="index.html", 
+        context={"request": request, "assentos": dados}
     )
 
+# 4. ROTA DE RESERVA
 @app.get("/reservar/{num}", response_class=HTMLResponse)
 async def reservar(request: Request, num: int):
-    # --- O PULO DO GATO ESTÁ AQUI ---
-    # Assim que ele clica, o status muda para 'reservado' no banco
-    # O timestamp serve para você saber quando a reserva começou (opcional)
-    c.execute("UPDATE assentos SET status='reservado', timestamp=? WHERE numero=? AND status='livre'", (int(time.time()), num))
+    limpar_reservas()
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    agora = int(time.time())
+    conn.execute("UPDATE assentos SET status='reservado', timestamp=? WHERE numero=? AND status='livre'", (agora, num))
     conn.commit()
     
-    return templates.TemplateResponse(
-        request=request, name="form.html", context={"num": num}
-    )
+    c = conn.cursor()
+    c.execute("SELECT status FROM assentos WHERE numero=?", (num,))
+    res = c.fetchone()
+    conn.close()
 
+    if res and res[0] == 'reservado':
+        return templates.TemplateResponse(
+            name="form.html", 
+            context={"request": request, "num": num}
+        )
+    return HTMLResponse("<script>alert('Assento ocupado!'); window.location.href='/';</script>")
+
+# 5. ROTA DE CONFIRMAÇÃO
 @app.post("/confirmar")
-async def confirmar(
-    assento: int = Form(...), 
-    nome: str = Form(...), 
-    nascimento: str = Form(...), 
-    pai: str = Form(...), 
-    mae: str = Form(...), 
-    pagamento: str = Form(...),
-    comprovante: UploadFile = File(...)
-):
-    # 1. Salva a foto do comprovante
-    extensao = comprovante.filename.split(".")[-1]
-    nome_foto = f"comprovante_assento_{assento}.{extensao}"
-    with open(nome_foto, "wb") as buffer:
+async def confirmar(assento: int = Form(...), comprovante: UploadFile = File(...)):
+    # Salva foto em local temporário
+    foto_path = f"/tmp/comprovante_{assento}.jpg"
+    with open(foto_path, "wb") as buffer:
         shutil.copyfileobj(comprovante.file, buffer)
 
-    # 2. Atualiza o Banco de Dados para 'pago' e preenche os dados
-    c.execute("""
-        UPDATE assentos 
-        SET status='pago', nome=?, nascimento=?, pai=?, mae=?, pagamento=? 
-        WHERE numero=?
-    """, (nome, nascimento, pai, mae, pagamento, assento))
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    conn.execute("UPDATE assentos SET status='pago', timestamp=0 WHERE numero=?", (assento,))
     conn.commit()
-
-    # 3. Gera o arquivo TXT com os dados da reserva
-    with open(f"reserva_{assento}.txt", "w", encoding="utf-8") as f:
-        f.write(f"Assento: {assento}\nNome: {nome}\nPagamento: {pagamento}\nFoto: {nome_foto}")
-
-    # 4. Tela de Sucesso que fecha a aba após 3 segundos
-    return HTMLResponse("""
-        <html>
-            <body style='background:#1a1a2e;color:white;text-align:center;padding-top:100px;font-family:sans-serif;'>
-                <h1>✅ Comprovante Recebido!</h1>
-                <p>Sua reserva foi finalizada com sucesso. Esta aba será fechada.</p>
-                <script>setTimeout(()=>window.close(), 3000)</script>
-            </body>
-        </html>
-    """)
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    conn.close()
+    
+    return HTMLResponse("<h1>✅ Sucesso!</h1><script>setTimeout(()=>window.location.href='/', 2000)</script>")
