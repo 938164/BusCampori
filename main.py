@@ -6,16 +6,18 @@ import shutil
 import time
 import os
 
+# 1. Configura o caminho absoluto das pastas (Evita erro de pasta não encontrada)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, "db.sqlite")
+TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
+
 app = FastAPI()
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
-# Configuração do Banco de Dados e Inicialização
-DB_PATH = "db.sqlite"
-
+# 2. Inicialização Segura do Banco
 def inicializar_banco():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     c = conn.cursor()
-    # Cria a tabela se ela não existir
     c.execute("""
     CREATE TABLE IF NOT EXISTS assentos (
         numero INTEGER PRIMARY KEY,
@@ -28,7 +30,6 @@ def inicializar_banco():
         pagamento TEXT
     )
     """)
-    # Verifica se precisa criar os 60 assentos iniciais
     c.execute("SELECT COUNT(*) FROM assentos")
     if c.fetchone()[0] == 0:
         for i in range(1, 61):
@@ -36,14 +37,12 @@ def inicializar_banco():
         conn.commit()
     conn.close()
 
-# Chama a inicialização ao iniciar o app
 inicializar_banco()
 
-# Tempo de bloqueio (em segundos). 600 segundos = 10 minutos
 TEMPO_LIMITE_RESERVA = 600 
 
 def limpar_reservas_expiradas():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     c = conn.cursor()
     agora = int(time.time())
     limite = agora - TEMPO_LIMITE_RESERVA
@@ -54,30 +53,30 @@ def limpar_reservas_expiradas():
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     limpar_reservas_expiradas()
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     c = conn.cursor()
     c.execute("SELECT numero, status FROM assentos")
     dados = c.fetchall()
     conn.close()
-    return templates.TemplateResponse(request=request, name="index.html", context={"assentos": dados})
+    return templates.TemplateResponse("index.html", {"request": request, "assentos": dados})
 
 @app.get("/reservar/{num}", response_class=HTMLResponse)
 async def reservar(request: Request, num: int):
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     c = conn.cursor()
     agora = int(time.time())
-    # Tenta reservar
+    # Tenta reservar apenas se estiver livre
     c.execute("UPDATE assentos SET status='reservado', timestamp=? WHERE numero=? AND status='livre'", (agora, num))
     conn.commit()
-    # Verifica sucesso
+    
     c.execute("SELECT status FROM assentos WHERE numero=?", (num,))
-    resultado = c.fetchone()
+    status_atual = c.fetchone()[0]
     conn.close()
 
-    if resultado and resultado[0] == 'reservado':
-        return templates.TemplateResponse(request=request, name="form.html", context={"num": num})
+    if status_atual == 'reservado':
+        return templates.TemplateResponse("form.html", {"request": request, "num": num})
     else:
-        return HTMLResponse("<script>alert('Este assento já está ocupado ou reservado!'); window.location.href='/';</script>")
+        return HTMLResponse("<script>alert('Assento já reservado por outro usuário!'); window.location.href='/';</script>")
 
 @app.post("/confirmar")
 async def confirmar(
@@ -89,14 +88,15 @@ async def confirmar(
     pagamento: str = Form(...),
     comprovante: UploadFile = File(...)
 ):
-    # Salva o arquivo de comprovante
+    # Salva o arquivo na pasta raiz do projeto
     extensao = comprovante.filename.split(".")[-1]
     nome_foto = f"comprovante_assento_{assento}.{extensao}"
-    with open(nome_foto, "wb") as buffer:
+    caminho_foto = os.path.join(BASE_DIR, nome_foto)
+    
+    with open(caminho_foto, "wb") as buffer:
         shutil.copyfileobj(comprovante.file, buffer)
 
-    # Finaliza no banco
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     c = conn.cursor()
     c.execute("""
         UPDATE assentos 
