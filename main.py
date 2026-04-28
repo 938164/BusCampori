@@ -1,85 +1,102 @@
-import os
-import time
-import sqlite3
-import shutil
 from fastapi import FastAPI, Request, Form, File, UploadFile
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-
-# Garante que o Render encontre as pastas
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
-# Usar /tmp é a única forma garantida de escrita no Render gratuito
-DB_PATH = "/tmp/campori.db"
+import sqlite3
+import shutil
+import os
+import time
 
 app = FastAPI()
-templates = Jinja2Templates(directory=TEMPLATES_DIR)
+templates = Jinja2Templates(directory="templates")
 
-def init_db():
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute("""CREATE TABLE IF NOT EXISTS assentos (
-            numero INTEGER PRIMARY KEY, status TEXT, timestamp INTEGER)""")
-        c.execute("SELECT COUNT(*) FROM assentos")
-        if c.fetchone()[0] == 0:
-            for i in range(1, 61):
-                c.execute("INSERT INTO assentos (numero, status, timestamp) VALUES (?, 'livre', 0)", (i,))
-            conn.commit()
-        conn.close()
-    except Exception as e:
-        print(f"Erro ao iniciar banco: {e}")
+# Conexão com Banco de Dados
+def get_db():
+    conn = sqlite3.connect("db.sqlite", check_same_thread=False)
+    return conn
 
-init_db()
+conn = get_db()
+c = conn.cursor()
+
+# Criar tabela com todas as colunas necessárias
+c.execute("""
+CREATE TABLE IF NOT EXISTS assentos (
+    numero INTEGER PRIMARY KEY,
+    status TEXT,
+    timestamp INTEGER,
+    nome TEXT,
+    nascimento TEXT,
+    pai TEXT,
+    mae TEXT,
+    pagamento TEXT
+)
+""")
+
+# Iniciar assentos se o banco estiver vazio (1 a 60)
+c.execute("SELECT COUNT(*) FROM assentos")
+if c.fetchone()[0] == 0:
+    for i in range(1, 61):
+        c.execute("INSERT INTO assentos VALUES (?, 'livre', 0, '', '', '', '', '')", (i,))
+    conn.commit()
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        # Limpa expirados (5 minutos)
-        limite = int(time.time()) - 300
-        conn.execute("UPDATE assentos SET status='livre', timestamp=0 WHERE status='reservado' AND timestamp < ?", (limite,))
-        conn.commit()
-        
-        c = conn.cursor()
-        c.execute("SELECT numero, status FROM assentos")
-        assentos = c.fetchall()
-        conn.close()
-        return templates.TemplateResponse("index.html", {"request": request, "assentos": assentos})
-    except Exception as e:
-        return HTMLResponse(f"Erro no banco: {e}")
+    c.execute("SELECT numero, status FROM assentos")
+    dados = c.fetchall()
+    return templates.TemplateResponse(
+        request=request, name="index.html", context={"assentos": dados}
+    )
 
 @app.get("/reservar/{num}", response_class=HTMLResponse)
 async def reservar(request: Request, num: int):
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        agora = int(time.time())
-        conn.execute("UPDATE assentos SET status='reservado', timestamp=? WHERE numero=? AND status='livre'", (agora, num))
-        conn.commit()
-        
-        c = conn.cursor()
-        c.execute("SELECT status FROM assentos WHERE numero=?", (num,))
-        status = c.fetchone()[0]
-        conn.close()
-        
-        if status == 'reservado':
-            return templates.TemplateResponse("form.html", {"request": request, "num": num})
-        return HTMLResponse("<script>alert('Ocupado!'); window.location.href='/';</script>")
-    except:
-        return HTMLResponse("<script>window.location.href='/';</script>")
+    # --- O PULO DO GATO ESTÁ AQUI ---
+    # Assim que ele clica, o status muda para 'reservado' no banco
+    # O timestamp serve para você saber quando a reserva começou (opcional)
+    c.execute("UPDATE assentos SET status='reservado', timestamp=? WHERE numero=? AND status='livre'", (int(time.time()), num))
+    conn.commit()
+    
+    return templates.TemplateResponse(
+        request=request, name="form.html", context={"num": num}
+    )
 
 @app.post("/confirmar")
-async def confirmar(assento: int = Form(...), comprovante: UploadFile = File(...)):
-    try:
-        # Salva o comprovante em /tmp (único lugar permitido)
-        path = f"/tmp/foto_{assento}.jpg"
-        with open(path, "wb") as buffer:
-            shutil.copyfileobj(comprovante.file, buffer)
-            
-        conn = sqlite3.connect(DB_PATH)
-        conn.execute("UPDATE assentos SET status='pago', timestamp=0 WHERE numero=?", (assento,))
-        conn.commit()
-        conn.close()
-        return HTMLResponse("<h1>Sucesso!</h1><script>setTimeout(()=>window.location.href='/', 2000)</script>")
-    except:
-        return HTMLResponse("Erro ao confirmar.")
+async def confirmar(
+    assento: int = Form(...), 
+    nome: str = Form(...), 
+    nascimento: str = Form(...), 
+    pai: str = Form(...), 
+    mae: str = Form(...), 
+    pagamento: str = Form(...),
+    comprovante: UploadFile = File(...)
+):
+    # 1. Salva a foto do comprovante
+    extensao = comprovante.filename.split(".")[-1]
+    nome_foto = f"comprovante_assento_{assento}.{extensao}"
+    with open(nome_foto, "wb") as buffer:
+        shutil.copyfileobj(comprovante.file, buffer)
+
+    # 2. Atualiza o Banco de Dados para 'pago' e preenche os dados
+    c.execute("""
+        UPDATE assentos 
+        SET status='pago', nome=?, nascimento=?, pai=?, mae=?, pagamento=? 
+        WHERE numero=?
+    """, (nome, nascimento, pai, mae, pagamento, assento))
+    conn.commit()
+
+    # 3. Gera o arquivo TXT com os dados da reserva
+    with open(f"reserva_{assento}.txt", "w", encoding="utf-8") as f:
+        f.write(f"Assento: {assento}\nNome: {nome}\nPagamento: {pagamento}\nFoto: {nome_foto}")
+
+    # 4. Tela de Sucesso que fecha a aba após 3 segundos
+    return HTMLResponse("""
+        <html>
+            <body style='background:#1a1a2e;color:white;text-align:center;padding-top:100px;font-family:sans-serif;'>
+                <h1>✅ Comprovante Recebido!</h1>
+                <p>Sua reserva foi finalizada com sucesso. Esta aba será fechada.</p>
+                <script>setTimeout(()=>window.close(), 3000)</script>
+            </body>
+        </html>
+    """)
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
